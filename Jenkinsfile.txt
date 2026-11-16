@@ -1,82 +1,31 @@
 node {
-
-    // Configure GitHub push trigger
-    properties([
-        pipelineTriggers([
-            githubPush()
-        ])
-    ])
-
-    // Docker Hub image details
-    def dockerUser = "YOUR_DOCKERHUB_USERNAME"
-    def imageName = "${dockerUser}/oltrs"
-    def buildTag = "${env.BUILD_NUMBER}"
-
-    stage('Checkout') {
-        echo 'Checking out OLTRS source code'
-
+    stage('Git Checkout') {
         git branch: 'master',
-            url: 'https://github.com/YOUR_GITHUB_USERNAME/OLTRS.git'
+        url: 'https://github.com/archanareddyse/OLTRS.git'
     }
 
-    stage('Build and Test') {
-        echo 'Building and testing OLTRS using Maven'
-
-        def jdkHome = tool 'JDK17'
-        def mavenHome = tool 'Maven3'
-
-        withEnv([
-            "JAVA_HOME=${jdkHome}",
-            "PATH+JAVA=${jdkHome}\\bin",
-            "PATH+MAVEN=${mavenHome}\\bin"
-        ]) {
-            bat 'mvn clean verify'
-        }
+    stage('Build') {
+        sh 'mvn clean package'
     }
 
+    stage('Test') {
+        sh 'mvn test'
+    }
 
     stage('Docker Build') {
-        echo 'Creating Docker image'
-
-        bat """
-            docker build -t ${imageName}:${buildTag} .
-            docker tag ${imageName}:${buildTag} ${imageName}:latest
-        """
+        sh 'docker build -t YOUR_USERNAME/oltrs:latest .'
     }
-    
 
-         stage('Docker Hub Login and Push') {
-        echo 'Pushing Docker image to Docker Hub'
-
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'dockerhub-creds',
-                usernameVariable: 'DOCKER_USER',
-                passwordVariable: 'DOCKER_PASS'
-            )
-        ]) {
-            powershell '''
-                $env:DOCKER_PASS | docker login `
-                    --username $env:DOCKER_USER `
-                    --password-stdin
-
-                if ($LASTEXITCODE -ne 0) {
-                    exit 1
-                }
+    stage('Docker Push') {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'USER',
+            passwordVariable: 'PASS'
+        )]) {
+            sh '''
+                echo "$PASS" | docker login -u "$USER" --password-stdin
+                docker push YOUR_USERNAME/oltrs:latest
             '''
-
-            bat """
-                docker push ${imageName}:${buildTag}
-                docker push ${imageName}:latest
-            """
-
-            bat 'docker logout'
         }
     }
-
-    stage('Success') {
-        echo 'OLTRS CI/CD Pipeline completed successfully!'
-    }
 }
-
-
